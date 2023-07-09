@@ -8,3 +8,10 @@
     top:0; left:0;
     padding:1em;
 }
+
+#toolbar {
+    font-family: 'Courier New', Courier, monospace;
+    position:fixed;
+    bottom:0;
+    padding:1em;
+}

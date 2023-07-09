@@ -1,26 +1,8 @@
 const canvas = document.getElementById("sandbox");
 const debug = document.getElementById("debug");
+const toolBar = document.getElementById("toolbar");
 let ctx:CanvasRenderingContext2D;
 let drawingOffset = [0,0];
-
-interface CanvasRenderingContext2D {
-    drawRoundedRectangle(x: number, y: number, width: number, height: number, cornerRadius: number): void;
-}
-
-CanvasRenderingContext2D.prototype.drawRoundedRectangle = function(x, y, width, height, cornerRadius) {
-    const radius = Math.min(cornerRadius, Math.min(width / 2, height / 2));
-
-    this.beginPath();
-    this.moveTo(x + radius, y);
-    this.arcTo(x + width, y, x + width, y + height, radius);
-    this.arcTo(x + width, y + height, x, y + height, radius);
-    this.arcTo(x, y + height, x, y, radius);
-    this.arcTo(x, y, x + width, y, radius);
-    this.closePath();
-
-    // Set stroke and fill styles as needed
-    this.fill();
-};
 
 console.log("Ready!");
 
@@ -60,62 +42,124 @@ const main = () => {
         ];
     }
 
+    const mouseDown = (e:MouseEvent) => {
+        if(!(e instanceof MouseEvent)) return;
+        // e.preventDefault();
+        for(let i = 0; i < world.expressions.length; i++){
+            for(let j = 0; j < world.expressions[i].nubs.length; j++){
+                const nub = world.expressions[i].nubs[j];
+                if(!nub.isHovered) continue;
+                document.body.style.cursor = "grabbing";
+                if(e.button == 2 || world.currentTool == 1) {
+                    // console.log("Copying");
+                    // RIGHT MOUSE BUTTON
+                    let newNub:Nub;
+                    if(nub instanceof NumberNub){
+                        newNub = new NumberNub(nub.value);
+                    } else {
+                        newNub = new Nub(nub.text);
+                    }
+                    newNub.isDragged = true;
+                    newNub.isHovered = true;
+                    newNub.dragOffset[0] = world.cursorPosition[0] - newNub.position[0];
+                    newNub.dragOffset[1] = world.cursorPosition[1] - newNub.position[1];
+                    newNub.position = [...nub.position];
+                    world.draggingItem = newNub;
+                } else if(e.button == 0) {
+                    // LEFT MOUSE BUTTON
+                    // console.log("Dragging");
+                    nub.isDragged = true;
+                    nub.dragOffset[0] = world.cursorPosition[0] - nub.position[0];
+                    nub.dragOffset[1] = world.cursorPosition[1] - nub.position[1];
+                }
+                return;
+            }
+        }
+    }
+
+    const mouseUp = (e:MouseEvent) => {
+        if(world.draggingItem){
+            const newExp:Expression = new Expression();
+            world.draggingItem.isDragged = false;
+            if(world.draggingItem instanceof Nub){
+                newExp.nubs.push(world.draggingItem);
+            }
+            world.draggingItem = null;
+
+            world.expressions.push(newExp);
+            // console.log(world.expressions);
+        }
+
+        for(let i = 0; i < world.expressions.length; i++){
+            for(let j = 0; j < world.expressions[i].nubs.length; j++){
+                const nub = world.expressions[i].nubs[j];
+                nub.isDragged = false;
+            }
+        }
+
+        document.body.style.cursor = "default";
+    }
+
     const printDebug = () => {
         if(!debug) return;
-        const debugText = "cursorPosition:\t ["+world.cursorPosition[0]+","+world.cursorPosition[1]+"]";
+        let debugText = "cursorPosition:\t ["+world.cursorPosition[0]+","+world.cursorPosition[1]+"]";
+        debugText += "\ncurrentTool:\t "+world.currentTool;
         debug.innerText = debugText;
     }
 
-    document.addEventListener("mousemove",mouseMove);
-    draw(); canvasSizeReset();
-}
-
-class World {
-    nubs:Nub[] = [];
-    cursorPosition: number[] = [0,0];
-
-    constructor(){
-        let defaultNub = new Nub();
-        this.nubs.push(defaultNub);
+    const handleContextMenu = (e:MouseEvent) => {
+        e.preventDefault();
     }
-    
-    draw(ctx:CanvasRenderingContext2D){
-        this.nubs.forEach(nub => {
-            nub.showHitbox = (
-                nub.position[0] - nub.width/2 < this.cursorPosition[0] && this.cursorPosition[0] <= nub.position[0] + nub.width/2 &&
-                nub.position[1] - nub.height/2 < this.cursorPosition[1] && this.cursorPosition[1] <= nub.position[1] + nub.height/2
-            )
-            nub.draw(ctx);
-        });
-    }
-}
 
-class Nub {
-    text = "1";
-    position = [0,0];
-    width = 64;
-    height = 64;
+    const initToolbar = () => {
+        if(!toolBar) return;
+        // toolBar.innerHTML = "";
+        for(let i = 0; i < world.tools.length; i++){
+            const tool = world.tools[i];
+            const label = document.createElement("label");
+            label.htmlFor = "tool_"+tool;
 
-    showHitbox = false;
+            const radio = document.createElement("input");
+            radio.type = "radio";
+            radio.id = "tool_"+tool;
+            radio.name = "tool";
+            radio.value = tool;
+            if(i == 0){
+                radio.checked = true;
+                radio.parentElement?.classList.add("selected");
+            }
+            radio.addEventListener("change", (e) => {
+                const target = e.target as HTMLInputElement;
+                if(target.checked){
+                    world.currentTool = i;
+                    target.parentElement?.classList.add("selected");
+                }
+            })
 
-    draw(ctx:CanvasRenderingContext2D){
-        // console.log("drawing nub");
-        // console.log(ctx.font);
-        if(this.showHitbox){
-            ctx.fillStyle = "#ffffff";
-            ctx.globalAlpha = 0.2;
-            ctx.drawRoundedRectangle(drawingOffset[0] - this.width/2, drawingOffset[1] - this.height/2, this.width, this.height, 16);
-            ctx.globalAlpha = 1;
-            document.body.style.cursor = "grab";
-        } else {
-            document.body.style.cursor = "default";
+            const labelText = document.createTextNode(tool+" ["+(i+1)+"]");
+
+            label.appendChild(radio);
+            label.appendChild(labelText);
+
+            toolBar.appendChild(label);
         }
-
-        ctx.font = this.width+"px monospace";
-        ctx.fillStyle = "#ffffff";
-        ctx.textAlign = "center";
-        ctx.fillText(this.text, drawingOffset[0], drawingOffset[1] + this.height/2 - 8);
     }
+
+    const handleKeyboard = (e:KeyboardEvent) => {
+        // console.log(e.key);
+        if(e.key === "1"){
+            document.getElementById("tool_Move")?.click();
+        } else if(e.key === "2"){
+            document.getElementById("tool_Copy")?.click();
+        }
+    }
+
+    canvas.addEventListener("mousemove",mouseMove);
+    canvas.addEventListener("mousedown",mouseDown);
+    canvas.addEventListener("mouseup",mouseUp);
+    canvas.addEventListener("contextmenu",handleContextMenu);
+    document.addEventListener("keydown",handleKeyboard);
+    draw(); canvasSizeReset(); initToolbar();
 }
 
 window.onload = main;
